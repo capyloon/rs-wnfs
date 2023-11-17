@@ -1399,6 +1399,44 @@ mod tests {
     use test_log::test;
     use wnfs_common::MemoryBlockStore;
 
+    #[async_std::test]
+    async fn test_perf_add_files() {
+        use std::time::Instant;
+
+        let rng = &mut thread_rng();
+        let store = &MemoryBlockStore::new();
+        let forest = &mut HamtForest::new_rsa_2048(rng);
+        let mut dir =
+            PrivateDirectory::new_and_store(&forest.empty_name(), Utc::now(), forest, store, rng)
+                .await
+                .unwrap();
+
+        for i in 0..5000 {
+            dir.write(
+                &[format!("file-{i}")],
+                true,
+                Utc::now(),
+                Vec::with_capacity(512 * 1024),
+                forest,
+                store,
+                rng,
+            )
+            .await
+            .unwrap();
+
+            if i % 100 == 0 {
+                let start = Instant::now();
+                dir.as_node().store(forest, store, rng).await.unwrap();
+                println!("#{i} : dir stored in {}ms", start.elapsed().as_millis());
+            }
+        }
+
+        // Do a final dir.store()
+        let start = Instant::now();
+        dir.as_node().store(forest, store, rng).await.unwrap();
+        println!("Final dir stored in {}ms", start.elapsed().as_millis());
+    }
+
     #[test(async_std::test)]
     async fn look_up_can_fetch_file_added_to_directory() {
         let rng = &mut ChaCha12Rng::seed_from_u64(0);
